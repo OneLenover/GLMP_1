@@ -5,14 +5,16 @@ using System.IO;
 using System.Xml.Serialization;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Photon.Pun;
+using Photon.Realtime;
 
-public class Game : MonoBehaviour
+public class Game : MonoBehaviourPunCallbacks
 {
     public static int SCREEN_WIDTH = 60;
     public static int SCREEN_HEIGHT = 80;
 
-    public int nc_x = 30;
-    public int nc_y = 40;
+    public int nc_x;
+    public int nc_y;
 
     public float speed = 0.1f;
 
@@ -20,12 +22,16 @@ public class Game : MonoBehaviour
 
     public static bool simulationEnabled = false;
 
+    private int initialPopulation;
+    private int resources = 10;
+
     Cell[,] grid = new Cell[SCREEN_WIDTH, SCREEN_HEIGHT];
 
     // Start is called before the first frame update
     void Start()
     {
-        PlaceCells(2);
+        PlaceCells(1);
+
     }
 
     // Update is called once per frame
@@ -61,10 +67,10 @@ public class Game : MonoBehaviour
     }
 
     public static bool load = false;
+    public static bool loadPlace = false;
     private void LoadPattern()
     {
         string path = Path.Combine(Application.persistentDataPath, "patterns/test.xml");
-
         if (!File.Exists(path))
         {
             return;
@@ -77,17 +83,28 @@ public class Game : MonoBehaviour
             Pattern pattern = (Pattern)serializer.Deserialize(reader.BaseStream);
 
             bool isAlive;
-            int offsetX = UnityEngine.Random.Range(0, SCREEN_WIDTH);
-            int offsetY = UnityEngine.Random.Range(0, SCREEN_HEIGHT);
 
-            for (int y = 0; y < 80; y++)
+            int patternCenterX = pattern.width / 2;
+            int patternCenterY = pattern.height / 2;
+
+            // ¬ычисл€ем смещение, чтобы центр структуры был по центру экрана
+            int offsetX = (SCREEN_WIDTH - pattern.width) / 2;
+            int offsetY = (SCREEN_HEIGHT - pattern.height) / 2;
+
+            // ¬ыбираем случайные смещени€ по оси x и y
+            int randomOffsetX = UnityEngine.Random.Range(0, SCREEN_WIDTH);
+            int randomOffsetY = UnityEngine.Random.Range(0, SCREEN_HEIGHT);
+
+            for (int y = 0; y < pattern.height; y++)
             {
-                for (int x = 0; x < 60; x++)
+                for (int x = 0; x < pattern.width; x++)
                 {
-                    int newX = (x + offsetX) % SCREEN_WIDTH;
-                    int newY = (y + offsetY) % SCREEN_HEIGHT;
+                    int newX, newY;
+                    // —мещаем координаты клетки на offsetX, offsetY и randomOffsetX, randomOffsetY
+                    newX = (x + offsetX + randomOffsetX) % SCREEN_WIDTH;
+                    newY = (y + offsetY + randomOffsetY) % SCREEN_HEIGHT;
 
-                    if (pattern.patternString[x + y * SCREEN_WIDTH] == '1')
+                    if (pattern.patternString[x + y * pattern.width] == '1')
                     {
                         isAlive = true;
                     }
@@ -112,9 +129,37 @@ public class Game : MonoBehaviour
 
         string patternString = null;
 
+        // Ќаходим крайние клетки структуры
+        int minX = SCREEN_WIDTH;
+        int maxX = 0;
+        int minY = SCREEN_HEIGHT;
+        int maxY = 0;
+
         for (int y = 0; y < SCREEN_HEIGHT; y++)
         {
             for (int x = 0; x < SCREEN_WIDTH; x++)
+            {
+                if (grid[x, y].isAlive)
+                {
+                    if (x < minX)
+                        minX = x;
+                    if (x > maxX)
+                        maxX = x;
+                    if (y < minY)
+                        minY = y;
+                    if (y > maxY)
+                        maxY = y;
+                }
+            }
+        }
+
+        // —охран€ем только клетки внутри границ структуры
+        pattern.width = maxX - minX + 1;
+        pattern.height = maxY - minY + 1;
+
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
             {
                 if (grid[x, y].isAlive == false)
                 {
@@ -198,6 +243,7 @@ public class Game : MonoBehaviour
         }
     }
 
+
     void PlaceCells(int type)
     {
         if (type == 1)
@@ -206,9 +252,11 @@ public class Game : MonoBehaviour
             {
                 for (int x = 0; x < SCREEN_WIDTH; x++)
                 {
-                    Cell cell = Instantiate(Resources.Load("PreFabs/Cell", typeof(Cell)), new Vector2(x - nc_x, y - nc_y), Quaternion.identity) as Cell;
+                    Cell cell = Instantiate(Resources.Load("Cell", typeof(Cell)), new Vector2(x - nc_x, y - nc_y), Quaternion.identity) as Cell;
                     grid[x, y] = cell;
+                    bool alive = RandomAliveCell();
                     grid[x, y].SetAlive(false);
+                    if (alive) initialPopulation++;
                 }
             }
         }
@@ -301,8 +349,12 @@ public class Game : MonoBehaviour
                     {
                         grid[x, y].SetAlive(false);
                     }
+                    else
+                    {
+                        // –ождение новой клетки - получение ресурса
+                        resources++;
+                    }
                 }
-
                 else
                 {
                     if (grid[x, y].numNeighbors == 3)

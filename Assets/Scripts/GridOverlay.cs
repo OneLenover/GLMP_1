@@ -22,6 +22,8 @@ public class GridOverlay : MonoBehaviour
     public Color mainColor = new Color(0f, 1f, 0f, 1f);
     public Color subColor = new Color(0f, 0.5f, 0f, 1f);
 
+    public static Color subColorStatic = new Color(0f, 0.5f, 0f, 1f);
+
     void CreateLineMaterial()
     {
         if (!lineMaterial)
@@ -53,7 +55,7 @@ public class GridOverlay : MonoBehaviour
 
         if (showSub)
         {
-            GL.Color(subColor);
+            GL.Color(subColorStatic);
 
             for (float y = 0; y <= gridSizeY; y += smallStep)
             {
